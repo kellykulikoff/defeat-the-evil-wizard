@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>San Francisco Weather Tracker App</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      /* General styling */
+      body {
+        font-family: "Arial", sans-serif;
+        background-color: #f0f4f8;
+        color: #333;
+        margin: 0;
+        padding: 20px;
+      }
+
+      h1,
+      h2 {
+        color: #007bff;
+      }
+
+      /* Map container */
+      #map {
+        height: 500px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+
+      /* Table styling */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        overflow-x: auto;
+      }
+
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+
+      th {
+        background-color: #f2f2f2;
+      }
+
+      /* Alerts */
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+      }
+
+      .warning {
+        background-color: #fff3cd;
+        color: #856404;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+      }
+
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+      }
+
+      /* Spinner */
+      .spinner {
+        display: none;
+        border: 4px solid rgba(0, 0, 0, 0.1);
+        border-top: 4px solid #007bff;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 20px auto;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Mobile responsiveness */
+      @media (max-width: 768px) {
+        h1 {
+          font-size: 1.5rem;
+        }
+
+        h2 {
+          font-size: 1.2rem;
+        }
+
+        table {
+          font-size: 0.8rem;
+        }
+      }
+
+      /* Increased width */
+      .container {
+        max-width: 1051px;
+        margin: 0 auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>San Francisco Weather Tracker App</h1>
+
+      <!-- Current Sunny Areas Section -->
+      <div id="current-sunny">
+        <h2>Current Sunny Areas in San Francisco</h2>
+        <p>
+          Green markers indicate sunny areas (cloud cover < 30%). Red indicates
+          cloudy. Blue indicates optimal location for best weather today.
+        </p>
+        <div class="spinner" id="current-spinner"></div>
+        <div id="map"></div>
+        <div id="current-error" class="error"></div>
+      </div>
+
+      <!-- Optimal Location Section -->
+      <div id="optimal-location">
+        <h2>Optimal Location for Best Weather Today</h2>
+        <p>
+          Based on temperature within the thermal neutral zone (68-77°F), then
+          lowest average cloud cover (most sun), then lowest max wind speed
+          (least wind).
+        </p>
+        <div id="optimal-message"></div>
+      </div>
+
+      <!-- Daily Weather Data Section -->
+      <div id="daily-weather">
+        <h2>Daily Weather Data</h2>
+        <div class="spinner" id="daily-spinner"></div>
+        <table id="daily-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Avg Cloud Cover (%)</th>
+              <th>Max Wind Speed (mph)</th>
+              <th>Avg Temp (°F)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div id="daily-error" class="error"></div>
+      </div>
+
+      <!-- TNZ Areas Section -->
+      <div id="tnz-areas">
+        <h2>Areas within Human Thermal Neutral Zone</h2>
+        <p>
+          The thermal neutral zone for humans is the range of ambient
+          temperatures, typically 68-77°F (20-25°C) for lightly clothed
+          individuals at rest, where the body can maintain its core temperature
+          without additional metabolic effort for heating or cooling.
+        </p>
+        <div id="tnz-list"></div>
+        <div id="tnz-error" class="error"></div>
+      </div>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+      // Locations dictionary
+      const locations = {
+        "Alamo Square": [37.776, -122.434],
+        Bayview: [37.726, -122.39],
+        "Bernal Heights": [37.743, -122.415],
+        Castro: [37.761, -122.435],
+        Chinatown: [37.794, -122.408],
+        Excelsior: [37.724, -122.427],
+        "Financial District": [37.794, -122.399],
+        "Haight-Ashbury": [37.77, -122.447],
+        Mission: [37.76, -122.419],
+        "Nob Hill": [37.793, -122.414],
+        "Noe Valley": [37.751, -122.432],
+        "North Beach": [37.801, -122.409],
+        "Pacific Heights": [37.792, -122.435],
+        "Potrero Hill": [37.76, -122.401],
+        Richmond: [37.78, -122.48],
+        SOMA: [37.778, -122.405],
+        Sunset: [37.76, -122.48],
+        Tenderloin: [37.783, -122.411],
+        "Pier 39": [37.8087, -122.4098],
+        "Golden Gate Park": [37.7694, -122.4762],
+        "Baker Beach": [37.7936, -122.4837],
+        "Ocean Beach": [37.7594, -122.5107],
+        "Coit Tower": [37.8024, -122.4058],
+        "Golden Gate Bridge Area": [37.8199, -122.4786],
+        "Dolores Park": [37.7597, -122.4271],
+        Presidio: [37.7989, -122.4662],
+        "Buena Vista Park": [37.7682, -122.4414],
+        "Corona Heights Park": [37.7648, -122.439],
+        "Twin Peaks": [37.7544, -122.4474],
+        "McLaren Park": [37.7178, -122.4193],
+        "Lincoln Park": [37.7858, -122.5023],
+        "Glen Canyon Park": [37.739, -122.443],
+        "Sutro Heights Park": [37.7778, -122.5111],
+        "Washington Square Park": [37.8008, -122.4101],
+        "Crissy Field": [37.803, -122.465],
+        "Lafayette Park": [37.7918, -122.4278],
+        "Stern Grove": [37.7363, -122.477],
+        "Mountain Lake Park": [37.7875, -122.4678],
+        "Duboce Park": [37.7695, -122.433],
+        "Union Square": [37.7879, -122.4075],
+        "Salesforce Tower": [37.7899, -122.3969],
+        "Lombard Street": [37.8021, -122.4187],
+        "Transamerica Pyramid": [37.7952, -122.4029],
+        "Ferry Building": [37.7956, -122.3933],
+        "Palace of Fine Arts": [37.8034, -122.4487],
+        Exploratorium: [37.801, -122.3978],
+        "Cable Car Museum": [37.7947, -122.4116],
+        "Alcatraz Island": [37.8267, -122.4228],
+        "California Academy of Sciences": [37.7699, -122.4661],
+        "de Young Museum": [37.7714, -122.4688],
+        "Sutro Baths": [37.7833, -122.5136],
+        "Lands End Trail": [37.7877, -122.5053],
+        "Batteries to Bluffs Trail": [37.793, -122.483],
+        "Mount Sutro Trail": [37.758, -122.456],
+        "Philosopher's Way Trail": [37.717, -122.419],
+        "Lovers' Lane Trail": [37.797, -122.457],
+        "Strawberry Hill Trail": [37.7685, -122.4754],
+        "China Beach": [37.7879851, -122.4910832],
+        "Marshall's Beach": [37.801685, -122.479965],
+        "Fort Funston Beach": [37.7195436, -122.5028052],
+        "Aquatic Park Beach": [37.8064236, -122.4239802],
+        "Mile Rock Beach": [37.7927536, -122.5103236],
+        "India Basin Shoreline Park": [37.73421, -122.37605],
+        "Alta Plaza Park": [37.7911417, -122.4376241],
+        "Angelo J. Rossi Playground": [37.7787325, -122.4572683],
+        "Aptos Playground": [37.728, -122.467],
+        "Argonne Playground": [37.7793741, -122.4777496],
+        "Balboa Park": [37.725353, -122.445496],
+        "Billy Goat Hill Trail": [37.741382, -122.432971],
+        "Cabrillo Playground": [37.77289, -122.49874],
+        "Cayuga Playground": [37.713856, -122.450439],
+        "Collis P. Huntington Park": [37.79217, -122.41218],
+        "Conservatory of Flowers": [37.7723, -122.46],
+        "Agua Vista Park": [37.7704, -122.3856],
+        "Bayfront Park": [37.7725, -122.3855],
+        "Bayview Gateway Park": [37.727, -122.386],
+        "Brannan Street Park": [37.78, -122.391],
+        "China Basin Park": [37.774, -122.389],
+        "Crane Cove Park": [37.757, -122.383],
+        "Cruise Terminal Plaza": [37.794, -122.387],
+        "Fort Point Beach": [37.8105, -122.477],
+        "Asian Art Museum": [37.7803, -122.4166],
+        SFMOMA: [37.7857, -122.4012],
+        "Beat Museum": [37.7976, -122.4059],
+        "Museum of the African Diaspora": [37.7861, -122.401],
+        "Cartoon Art Museum": [37.783, -122.4007],
+        "Mission Dolores": [37.7641, -122.4264],
+        "Old St. Mary's Church": [37.7926, -122.4059],
+      };
+
+      // Constants
+      const KMH_TO_MPH = 0.621371;
+      const TNZ_LOW = 68;
+      const TNZ_HIGH = 77;
+      const BATCH_SIZE = 20;
+
+      // Helper functions
+      function cToF(c) {
+        return (c * 9) / 5 + 32;
+      }
+
+      async function fetchWeather(url) {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return await response.json();
+        } catch (error) {
+          console.error("Fetch error:", error);
+          throw error;
+        }
+      }
+
+      async function getCurrentWeatherBatch(names, lats, lons) {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats.join(
+          ","
+        )}&longitude=${lons.join(
+          ","
+        )}&current=cloud_cover,wind_speed_10m,temperature_2m&timezone=America/Los_Angeles`;
+        const data = await fetchWeather(url);
+        const results = [];
+        for (let i = 0; i < data.length; i++) {
+          const currents = data[i].current;
+          const cloud = currents.cloud_cover;
+          const wind =
+            Math.round(currents.wind_speed_10m * KMH_TO_MPH * 10) / 10;
+          const temp = Math.round(cToF(currents.temperature_2m));
+          const sunny = cloud < 30;
+          results.push({
+            name: names[i],
+            lat: lats[i],
+            lon: lons[i],
+            cloud,
+            wind,
+            temp,
+            sunny,
+          });
+        }
+        return results;
+      }
+
+      async function getDailyWeatherBatch(names, lats, lons) {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats.join(
+          ","
+        )}&longitude=${lons.join(
+          ","
+        )}&daily=cloud_cover_mean,wind_speed_10m_max,temperature_2m_mean&forecast_days=1&timezone=America/Los_Angeles`;
+        const data = await fetchWeather(url);
+        const results = [];
+        for (let i = 0; i < data.length; i++) {
+          const dailys = data[i].daily;
+          const cloud_mean = dailys.cloud_cover_mean[0];
+          const wind_max =
+            Math.round(dailys.wind_speed_10m_max[0] * KMH_TO_MPH * 100) / 100;
+          const temp_mean = Math.round(cToF(dailys.temperature_2m_mean[0]));
+          results.push({ name: names[i], cloud_mean, wind_max, temp_mean });
+        }
+        return results;
+      }
+
+      // Prepare batches
+      const allNames = Object.keys(locations);
+      const allLats = allNames.map((name) => locations[name][0]);
+      const allLons = allNames.map((name) => locations[name][1]);
+      const batches = [];
+      for (let i = 0; i < allNames.length; i += BATCH_SIZE) {
+        batches.push({
+          names: allNames.slice(i, i + BATCH_SIZE),
+          lats: allLats.slice(i, i + BATCH_SIZE),
+          lons: allLons.slice(i, i + BATCH_SIZE),
+        });
+      }
+
+      // Fetch all batches concurrently
+      async function fetchBatches(fetchFunc) {
+        const promises = batches.map((batch) =>
+          fetchFunc(batch.names, batch.lats, batch.lons)
+        );
+        const results = await Promise.all(promises);
+        return results.flat();
+      }
+
+      // Initialize map
+      const map = L.map("map").setView([37.77, -122.42], 12);
+      L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        }
+      ).addTo(map);
+
+      // Main function
+      async function loadData() {
+        // Show spinners
+        document.getElementById("current-spinner").style.display = "block";
+        document.getElementById("daily-spinner").style.display = "block";
+
+        try {
+          // Fetch daily data
+          const dailyData = await fetchBatches(getDailyWeatherBatch);
+
+          // Process daily data
+          let optimal = null;
+          let optimalLat = null;
+          let optimalLon = null;
+          let optimalCloud = null;
+          let optimalWind = null;
+          let optimalTemp = null;
+          let usedFallback = false;
+
+          const tnzData = dailyData.filter(
+            (d) => d.temp_mean >= TNZ_LOW && d.temp_mean <= TNZ_HIGH
+          );
+          if (tnzData.length > 0) {
+            tnzData.sort(
+              (a, b) => a.cloud_mean - b.cloud_mean || a.wind_max - b.wind_max
+            );
+            optimal = tnzData[0];
+          } else {
+            dailyData.forEach((d) => {
+              d.temp_diff = Math.abs(d.temp_mean - (TNZ_LOW + TNZ_HIGH) / 2);
+            });
+            dailyData.sort(
+              (a, b) =>
+                a.cloud_mean - b.cloud_mean ||
+                a.wind_max - b.wind_max ||
+                a.temp_diff - b.temp_diff
+            );
+            optimal = dailyData[0];
+            usedFallback = true;
+          }
+
+          if (optimal) {
+            const optimalName = optimal.name;
+            [optimalLat, optimalLon] = locations[optimalName];
+            optimalCloud = optimal.cloud_mean;
+            optimalWind = optimal.wind_max;
+            optimalTemp = optimal.temp_mean;
+
+            const optimalMessage = document.getElementById("optimal-message");
+            if (usedFallback) {
+              optimalMessage.className = "warning";
+              optimalMessage.innerHTML = `No locations within the thermal neutral zone today. The closest optimal is <strong>${optimalName}</strong> with average cloud cover ${optimalCloud}%, max wind ${optimalWind} mph, and average temp ${optimalTemp} °F.`;
+            } else {
+              optimalMessage.className = "success";
+              optimalMessage.innerHTML = `The optimal location today is <strong>${optimalName}</strong> with average cloud cover ${optimalCloud}%, max wind ${optimalWind} mph, and average temp ${optimalTemp} °F.`;
+            }
+          } else {
+            document.getElementById("optimal-message").className = "error";
+            document.getElementById("optimal-message").innerHTML =
+              "Error determining optimal location.";
+          }
+
+          // Display daily table
+          const tableBody = document.querySelector("#daily-table tbody");
+          tableBody.innerHTML = "";
+          dailyData.forEach((row) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                        <td>${row.name}</td>
+                        <td>${row.cloud_mean}</td>
+                        <td>${row.wind_max.toFixed(2)}</td>
+                        <td>${row.temp_mean}</td>
+                    `;
+            tableBody.appendChild(tr);
+          });
+
+          // TNZ list
+          const tnzList = document.getElementById("tnz-list");
+          const tnzLocations = dailyData
+            .filter((d) => d.temp_mean >= TNZ_LOW && d.temp_mean <= TNZ_HIGH)
+            .map((d) => d.name);
+          if (tnzLocations.length > 0) {
+            tnzList.innerHTML =
+              "Locations within the thermal neutral zone:<br>" +
+              tnzLocations
+                .sort()
+                .map((loc) => `- ${loc}`)
+                .join("<br>");
+          } else {
+            tnzList.innerHTML =
+              "No locations within the thermal neutral zone today.";
+          }
+
+          // Hide daily spinner
+          document.getElementById("daily-spinner").style.display = "none";
+
+          // Fetch current data
+          const currentData = await fetchBatches(getCurrentWeatherBatch);
+
+          // Add markers to map
+          currentData.forEach((row) => {
+            const color = row.sunny ? "green" : "red";
+            const popupHtml = `
+                        ${row.name}<br>
+                        Cloud: ${row.cloud}% <br>
+                        Wind: ${row.wind} mph <br>
+                        Temp: ${row.temp} °F <br>
+                        <a href="https://www.google.com/maps/dir/?api=1&destination=${row.lat},${row.lon}" target="_blank">Navigate to ${row.name}</a>
+                    `;
+            L.circleMarker([row.lat, row.lon], {
+              radius: 10,
+              color: color,
+              fill: true,
+              fillColor: color,
+            })
+              .addTo(map)
+              .bindPopup(popupHtml);
+          });
+
+          // Add optimal blue marker
+          if (optimalLat && optimalLon) {
+            const popupHtmlOpt = `
+                        Optimal: ${optimal.name}<br>
+                        Avg Cloud: ${optimalCloud}% <br>
+                        Max Wind: ${optimalWind} mph <br>
+                        Avg Temp: ${optimalTemp} °F <br>
+                        <a href="https://www.google.com/maps/dir/?api=1&destination=${optimalLat},${optimalLon}" target="_blank">Navigate to ${optimal.name}</a>
+                    `;
+            L.circleMarker([optimalLat, optimalLon], {
+              radius: 12,
+              color: "blue",
+              fill: true,
+              fillColor: "blue",
+            })
+              .addTo(map)
+              .bindPopup(popupHtmlOpt);
+          }
+
+          // Hide current spinner
+          document.getElementById("current-spinner").style.display = "none";
+        } catch (error) {
+          document.getElementById("current-error").innerHTML =
+            "Error fetching current weather data.";
+          document.getElementById("daily-error").innerHTML =
+            "No daily weather data available.";
+          document.getElementById("tnz-error").innerHTML =
+            "No data available for thermal neutral zone analysis.";
+          document.getElementById("current-spinner").style.display = "none";
+          document.getElementById("daily-spinner").style.display = "none";
+        }
+      }
+
+      // Load data on page load
+      loadData();
+    </script>
+  </body>
+</html>
